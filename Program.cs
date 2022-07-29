@@ -24,15 +24,23 @@ namespace SolidityStandardJsonLiteralContents
 		
 		private static void JsonConverterApp()
 		{
-			Console.Write("Enter json path: ");
-			string pathLine = Console.ReadLine();
-			JObject json = TryLoadJsonFromPath(pathLine);
+			Console.WriteLine("1) Hey! This console app will help to generate a proper Standard-Json-Input json compatible with a blockchain scanner.");
+			Console.WriteLine("2) First, open your Remix IDE, compile your contract and locate an 'artifacts' folder.");
+			Console.WriteLine("3) Locate the 'YourContract_metadata.json' file and paste its contents after pressing ENTER key here.");
+
+			Console.WriteLine();
+			Console.WriteLine("Press ENTER to open the pasting form.");
+			while (Console.ReadKey().Key != ConsoleKey.Enter) { }
+
+			PasteForm pasteForm = new PasteForm("Please paste the contents of 'YourContract_metadata.json':");
+			pasteForm.ShowDialog();
+			JObject json = TryLoadJsonFromText(pasteForm.PastedText);
 
 			if (json != null)
 			{
 				RemoveExcessStuff(json);
 				ReplaceUrlsWithContent(json);
-				SaveModifiedJson(pathLine, json);
+				SaveModifiedJson(json);
 			}
 		}
 
@@ -97,11 +105,24 @@ namespace SolidityStandardJsonLiteralContents
 			}
 		}
 
-		private static void SaveModifiedJson(string sourcePath, JObject json)
+		private static void SaveModifiedJson(JObject json)
 		{
-			string newPath = Path.Combine(Path.GetDirectoryName(sourcePath), Path.GetFileNameWithoutExtension(sourcePath) + "_contents.json");
-			string jsonStr = json.ToString(Formatting.Indented);
-			File.WriteAllText(newPath, jsonStr);
+			SaveFileDialog saveFileDialog = new SaveFileDialog();
+			saveFileDialog.InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+			saveFileDialog.FileName = "YourContract_StandardInputJson.json";
+
+			if (saveFileDialog.ShowDialog() == DialogResult.OK)
+			{
+				string savePath = saveFileDialog.FileName;
+				string jsonStr = json.ToString(Formatting.Indented);
+
+				File.WriteAllText(savePath, jsonStr);
+				Console.WriteLine($"Saved to {savePath}");
+			}
+			else
+			{
+				Console.WriteLine("Cancelled!");
+			}
 		}
 
 		private static string DownloadIpfsData(string hash, string importName)
@@ -120,25 +141,20 @@ namespace SolidityStandardJsonLiteralContents
 			{
 				if (ex.Status == WebExceptionStatus.Timeout)
 				{
-					string clipboardText;
+					Console.WriteLine();
+					Console.WriteLine($"Unable to load ipfs for hash '{hash}' ({importName}). Please copy the contract contents in the paste window.");
 
-					do
+					PasteForm pasteForm = new PasteForm($"Please paste Solidity code for '{importName}' here:");
+					if (pasteForm.ShowDialog() != DialogResult.OK)
 					{
-						Console.WriteLine();
-						Console.WriteLine($"Unable to load ipfs for hash '{hash}' ({importName}). Please copy script and press Enter.");
-						while (Console.ReadKey().Key != ConsoleKey.Enter) { }
-
-						clipboardText = Clipboard.GetText();
-
-						Console.WriteLine("Pasted script:");
-						Console.WriteLine(clipboardText);
-						Console.WriteLine();
-
-						Console.WriteLine("Press Enter again to confirm");
+						throw new OperationCanceledException();
 					}
-					while (Console.ReadKey().Key != ConsoleKey.Enter);
 
-					return clipboardText;
+					Console.WriteLine("Pasted script:");
+					Console.WriteLine(pasteForm.PastedText);
+					Console.WriteLine();
+
+					return pasteForm.PastedText;
 				}
 
 				throw ex;
@@ -150,7 +166,20 @@ namespace SolidityStandardJsonLiteralContents
 			try
 			{
 				string text = File.ReadAllText(path);
-				return JsonConvert.DeserializeObject<JObject>(text);
+				return TryLoadJsonFromText(text);
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine(ex.ToString());
+				return null;
+			}
+		}
+
+		private static JObject TryLoadJsonFromText(string json)
+		{
+			try
+			{
+				return JsonConvert.DeserializeObject<JObject>(json);
 			}
 			catch (Exception ex)
 			{
